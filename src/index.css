@@ -1,0 +1,48 @@
+:root {
+  --accent: #1d766f;
+  --app-bg: #dfe5df;
+  --border: #cfd7d0;
+  --border-strong: #aeb9b1;
+  --canvas-bg: #f7f8f4;
+  --control-bg: #f8faf4;
+  --control-hover: #edf2ec;
+  --danger: #b42318;
+  --edge: #59636b;
+  --editor-bg: #f0f3ee;
+  --heading: #162026;
+  --ink: #172028;
+  --muted: #64706a;
+  --node-bg: #fffffb;
+  --node-border: #9aa89f;
+  --node-shadow: 0 10px 24px rgba(22, 32, 38, 0.1);
+  --ok: #1f7a3d;
+  --panel-bg: #eef2ed;
+  --path: #c2410c;
+  --text: #34413b;
+  --warning: #b7791f;
+  --mono: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  --sans:
+    'Avenir Next', Avenir, 'Segoe UI Variable', 'Segoe UI', Helvetica, Arial,
+    sans-serif;
+
+  color: var(--text);
+  background: var(--app-bg);
+  font-family: var(--sans);
+  font-synthesis: none;
+  line-height: 1.45;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+}
