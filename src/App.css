@@ -466,6 +466,7 @@ input[type='range'] {
 .preview-toolbar {
   background: var(--panel-bg);
   border-bottom: 1px solid var(--border);
+  gap: 12px;
   justify-content: space-between;
   padding: 10px 14px;
 }
@@ -477,16 +478,47 @@ input[type='range'] {
   text-transform: uppercase;
 }
 
+.preview-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.preview-actions button {
+  min-width: 34px;
+}
+
+.preview-actions output {
+  color: var(--heading);
+  font-size: 12px;
+  font-weight: 800;
+  min-width: 42px;
+  text-align: center;
+}
+
 .svg-frame {
   align-items: center;
+  cursor: grab;
   display: flex;
   justify-content: center;
   min-height: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 28px;
+  touch-action: none;
+  user-select: none;
 }
 
-.svg-frame svg {
+.svg-frame[data-panning='true'] {
+  cursor: grabbing;
+}
+
+.svg-viewport {
+  transform-origin: center center;
+  will-change: transform;
+}
+
+.svg-viewport svg {
+  display: block;
   height: auto;
   max-height: 100%;
   max-width: 100%;

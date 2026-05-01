@@ -9,6 +9,16 @@ vi.mock('html-to-image', () => ({
   toPng: vi.fn(async () => 'data:image/png;base64,test'),
 }))
 
+vi.mock('mermaid', () => ({
+  default: {
+    initialize: vi.fn(),
+    parse: vi.fn(async () => true),
+    render: vi.fn(async () => ({
+      svg: '<svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg"><path d="M10 10H110" /></svg>',
+    })),
+  },
+}))
+
 beforeAll(() => {
   class ResizeObserverStub {
     observe = vi.fn()
@@ -18,6 +28,18 @@ beforeAll(() => {
 
   vi.stubGlobal('ResizeObserver', ResizeObserverStub)
   vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => undefined)
+  Object.defineProperty(HTMLElement.prototype, 'setPointerCapture', {
+    configurable: true,
+    value: vi.fn(),
+  })
+  Object.defineProperty(HTMLElement.prototype, 'releasePointerCapture', {
+    configurable: true,
+    value: vi.fn(),
+  })
+  Object.defineProperty(HTMLElement.prototype, 'hasPointerCapture', {
+    configurable: true,
+    value: vi.fn(() => true),
+  })
 })
 
 afterEach(() => {
@@ -64,5 +86,56 @@ describe('App', () => {
         transform: expect.stringMatching(/^translate\(.+\) scale\(.+\)$/),
       }),
     )
+  })
+
+  it('provides zoom controls for the SVG preview', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'SVG' }))
+
+    const previewViewport = screen.getByTestId('svg-preview-viewport')
+    await waitFor(() => expect(screen.getByTitle('Zoom in SVG preview')).toBeEnabled())
+
+    expect(previewViewport).toHaveStyle({
+      transform: 'translate(0px, 0px) scale(1)',
+    })
+
+    fireEvent.click(screen.getByTitle('Zoom in SVG preview'))
+
+    expect(previewViewport).toHaveStyle({
+      transform: 'translate(0px, 0px) scale(1.2)',
+    })
+    expect(screen.getByText('120%')).toBeInTheDocument()
+  })
+
+  it('pans the SVG preview by dragging', async () => {
+    render(<App />)
+
+    fireEvent.click(screen.getByRole('tab', { name: 'SVG' }))
+
+    const previewFrame = screen.getByTestId('svg-preview-frame')
+    const previewViewport = screen.getByTestId('svg-preview-viewport')
+    await waitFor(() => expect(screen.getByTitle('Zoom in SVG preview')).toBeEnabled())
+
+    fireEvent.pointerDown(previewFrame, {
+      button: 0,
+      clientX: 10,
+      clientY: 10,
+      pointerId: 1,
+    })
+    fireEvent.pointerMove(previewFrame, {
+      clientX: 42,
+      clientY: 36,
+      pointerId: 1,
+    })
+    fireEvent.pointerUp(previewFrame, {
+      clientX: 42,
+      clientY: 36,
+      pointerId: 1,
+    })
+
+    expect(previewViewport).toHaveStyle({
+      transform: 'translate(32px, 26px) scale(1)',
+    })
   })
 })

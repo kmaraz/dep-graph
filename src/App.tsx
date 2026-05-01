@@ -33,8 +33,18 @@ import {
   Route,
   Search,
   Upload,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type PointerEvent,
+  type WheelEvent,
+} from 'react'
 import './App.css'
 import { exampleDiagram } from './lib/exampleDiagram'
 import {
@@ -60,6 +70,9 @@ const edgeTypes = {
 const EXPORT_PADDING = 48
 const EXPORT_MIN_HEIGHT = 520
 const EXPORT_MIN_WIDTH = 960
+const PREVIEW_MAX_ZOOM = 4
+const PREVIEW_MIN_ZOOM = 0.25
+const PREVIEW_ZOOM_STEP = 0.2
 
 type SelectedElement =
   | { type: 'node'; id: string }
@@ -100,6 +113,7 @@ function App() {
 function DependencyGraphWorkspace() {
   const graphPaneRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const previewPanStartRef = useRef({ pointerX: 0, pointerY: 0, x: 0, y: 0 })
   const { fitView, getNodes, setCenter } = useReactFlow()
   const [source, setSource] = useState(exampleDiagram)
   const [query, setQuery] = useState('')
@@ -115,6 +129,12 @@ function DependencyGraphWorkspace() {
     status: 'rendering',
     svg: '',
   })
+  const [previewTransform, setPreviewTransform] = useState({
+    x: 0,
+    y: 0,
+    zoom: 1,
+  })
+  const [isPreviewPanning, setIsPreviewPanning] = useState(false)
 
   const parsedGraph = useMemo(() => parseMermaidFlowchart(source), [source])
   const selectedNode = useMemo(
@@ -213,6 +233,11 @@ function DependencyGraphWorkspace() {
     ? getNodeStats(parsedGraph.edges, selectedNode.id)
     : undefined
 
+  function updateSource(nextSource: string) {
+    setSource(nextSource)
+    resetSvgPreview()
+  }
+
   function handleSourceFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0]
     if (!file) {
@@ -220,7 +245,7 @@ function DependencyGraphWorkspace() {
     }
     const reader = new FileReader()
     reader.onload = () => {
-      setSource(String(reader.result ?? ''))
+      updateSource(String(reader.result ?? ''))
       event.target.value = ''
     }
     reader.readAsText(file)
@@ -310,6 +335,65 @@ function DependencyGraphWorkspace() {
     downloadUrl('mermaid-dependency-graph.png', dataUrl)
   }
 
+  function zoomSvgPreview(direction: 1 | -1) {
+    setPreviewTransform((current) => ({
+      ...current,
+      zoom: clampPreviewZoom(current.zoom + direction * PREVIEW_ZOOM_STEP),
+    }))
+  }
+
+  function resetSvgPreview() {
+    setPreviewTransform({ x: 0, y: 0, zoom: 1 })
+    setIsPreviewPanning(false)
+  }
+
+  function handlePreviewWheel(event: WheelEvent<HTMLDivElement>) {
+    event.preventDefault()
+    zoomSvgPreview(event.deltaY > 0 ? -1 : 1)
+  }
+
+  function handlePreviewPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) {
+      return
+    }
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Programmatic pointer events do not always have an active native pointer.
+    }
+    previewPanStartRef.current = {
+      pointerX: event.clientX,
+      pointerY: event.clientY,
+      x: previewTransform.x,
+      y: previewTransform.y,
+    }
+    setIsPreviewPanning(true)
+  }
+
+  function handlePreviewPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (!isPreviewPanning) {
+      return
+    }
+
+    const start = previewPanStartRef.current
+    setPreviewTransform((current) => ({
+      ...current,
+      x: start.x + event.clientX - start.pointerX,
+      y: start.y + event.clientY - start.pointerY,
+    }))
+  }
+
+  function stopPreviewPanning(event: PointerEvent<HTMLDivElement>) {
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId)
+      }
+    } catch {
+      // Ignore synthetic pointer events without active capture.
+    }
+    setIsPreviewPanning(false)
+  }
+
   return (
     <main className="app-shell">
       <section className="source-pane" aria-label="Mermaid source">
@@ -328,7 +412,7 @@ function DependencyGraphWorkspace() {
             <Upload size={16} />
             Import
           </button>
-          <button type="button" onClick={() => setSource(exampleDiagram)}>
+          <button type="button" onClick={() => updateSource(exampleDiagram)}>
             <FileCode2 size={16} />
             Example
           </button>
@@ -348,7 +432,7 @@ function DependencyGraphWorkspace() {
           id="diagram-source"
           spellCheck={false}
           value={source}
-          onChange={(event) => setSource(event.target.value)}
+          onChange={(event) => updateSource(event.target.value)}
           wrap="off"
         />
 
@@ -524,23 +608,66 @@ function DependencyGraphWorkspace() {
             <div className="preview-pane">
               <div className="preview-toolbar">
                 <span>{preview.status === 'error' ? 'Render failed' : 'Mermaid SVG preview'}</span>
-                <button
-                  type="button"
-                  disabled={preview.status !== 'ready'}
-                  onClick={exportSvg}
-                  title="Export Mermaid SVG"
-                >
-                  <Download size={16} />
-                  SVG
-                </button>
+                <div className="preview-actions">
+                  <button
+                    type="button"
+                    disabled={preview.status !== 'ready'}
+                    onClick={() => zoomSvgPreview(-1)}
+                    title="Zoom out SVG preview"
+                  >
+                    <ZoomOut size={16} />
+                  </button>
+                  <output>{Math.round(previewTransform.zoom * 100)}%</output>
+                  <button
+                    type="button"
+                    disabled={preview.status !== 'ready'}
+                    onClick={() => zoomSvgPreview(1)}
+                    title="Zoom in SVG preview"
+                  >
+                    <ZoomIn size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={preview.status !== 'ready'}
+                    onClick={resetSvgPreview}
+                    title="Reset SVG pan and zoom"
+                  >
+                    <LocateFixed size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    disabled={preview.status !== 'ready'}
+                    onClick={exportSvg}
+                    title="Export Mermaid SVG"
+                  >
+                    <Download size={16} />
+                    SVG
+                  </button>
+                </div>
               </div>
               {preview.status === 'error' ? (
                 <pre className="render-error">{preview.error}</pre>
               ) : (
                 <div
                   className="svg-frame"
-                  dangerouslySetInnerHTML={{ __html: preview.svg }}
-                />
+                  data-panning={isPreviewPanning}
+                  data-testid="svg-preview-frame"
+                  onPointerCancel={stopPreviewPanning}
+                  onPointerDown={handlePreviewPointerDown}
+                  onPointerLeave={stopPreviewPanning}
+                  onPointerMove={handlePreviewPointerMove}
+                  onPointerUp={stopPreviewPanning}
+                  onWheel={handlePreviewWheel}
+                >
+                  <div
+                    className="svg-viewport"
+                    data-testid="svg-preview-viewport"
+                    style={{
+                      transform: `translate(${previewTransform.x}px, ${previewTransform.y}px) scale(${previewTransform.zoom})`,
+                    }}
+                    dangerouslySetInnerHTML={{ __html: preview.svg }}
+                  />
+                </div>
               )}
             </div>
           )}
@@ -819,6 +946,10 @@ function miniMapNodeColor(node: Node<DependencyNodeData>): string {
   if (node.data.path) return '#c2410c'
   if (node.data.matched) return '#1d766f'
   return '#3c454d'
+}
+
+function clampPreviewZoom(zoom: number): number {
+  return Math.min(PREVIEW_MAX_ZOOM, Math.max(PREVIEW_MIN_ZOOM, zoom))
 }
 
 function downloadText(filename: string, contents: string, type: string) {
